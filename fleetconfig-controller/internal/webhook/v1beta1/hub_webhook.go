@@ -23,7 +23,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/validation/field"
-	"open-cluster-management.io/api/client/addon/clientset/versioned"
+	addonapi "open-cluster-management.io/api/client/addon/clientset/versioned"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -31,8 +31,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	"github.com/open-cluster-management-io/lab/fleetconfig-controller/api/v1beta1"
-	"github.com/open-cluster-management-io/lab/fleetconfig-controller/internal/kube"
-	"github.com/open-cluster-management-io/lab/fleetconfig-controller/pkg/common"
 )
 
 // nolint:unused
@@ -41,11 +39,7 @@ var hublog = logf.Log.WithName("hub-resource")
 
 // SetupHubWebhookWithManager registers the webhook for Hub in the manager.
 func SetupHubWebhookWithManager(mgr ctrl.Manager) error {
-	kubeconfig, err := kube.RawFromInClusterRestConfig()
-	if err != nil {
-		return err
-	}
-	addonC, err := common.AddOnClient(kubeconfig)
+	addonC, err := addonapi.NewForConfig(mgr.GetConfig())
 	if err != nil {
 		return err
 	}
@@ -66,7 +60,7 @@ func SetupHubWebhookWithManager(mgr ctrl.Manager) error {
 // as this struct is used only for temporary operations and does not need to be deeply copied.
 type HubCustomValidator struct {
 	client client.Client
-	addonC *versioned.Clientset
+	addonC *addonapi.Clientset
 }
 
 var _ webhook.CustomValidator = &HubCustomValidator{}
