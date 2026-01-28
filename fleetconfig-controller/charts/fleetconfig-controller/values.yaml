@@ -294,7 +294,7 @@ imageRegistry: ""
 ## @param image.pullPolicy Image pull policy
 image:
   repository: quay.io/open-cluster-management/fleetconfig-controller
-  tag: v0.1.9
+  tag: v0.2.0
   pullPolicy: IfNotPresent
 
 
@@ -365,15 +365,6 @@ livenessProbe:
 
 ## @param kubernetesClusterDomain kubernetes cluster domain
 kubernetesClusterDomain: cluster.local
-
-## @section cert-manager
-
-## @param cert-manager.enabled Whether to install cert-manager.
-cert-manager:
-  enabled: true
-
-  # Add any additional values to pass to the cert-manager Helm chart.
-  # See: https://artifacthub.io/packages/helm/cert-manager/cert-manager
 
 ## @section certificates
 

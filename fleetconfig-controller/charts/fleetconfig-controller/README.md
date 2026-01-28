@@ -11,7 +11,22 @@ helm install fleetconfig-controller ocm/fleetconfig-controller -n fleetconfig-sy
 ## Prerequisites
 
 - Kubernetes >= v1.19
-  
+- [cert-manager](https://cert-manager.io/) must be installed before deploying this chart. cert-manager is used to provision TLS certificates for the admission webhooks.
+
+### Installing cert-manager
+
+```bash
+# Add the Jetstack Helm repository
+helm repo add jetstack https://charts.jetstack.io
+helm repo update jetstack
+
+# Install cert-manager with CRDs
+helm install cert-manager jetstack/cert-manager \
+  --namespace cert-manager \
+  --create-namespace \
+  --set crds.enabled=true
+```
+
 ## Parameters
 
 ### FleetConfig Configuration
@@ -158,7 +173,7 @@ Resource specifications for all klusterlet-managed containers.
 | `replicas`                                          | fleetconfig-controller replica count                                                                                                                                       | `1`                                                      |
 | `imageRegistry`                                     | Image registry                                                                                                                                                             | `""`                                                     |
 | `image.repository`                                  | Image repository                                                                                                                                                           | `quay.io/open-cluster-management/fleetconfig-controller` |
-| `image.tag`                                         | Image tag                                                                                                                                                                  | `v0.1.9`                                                 |
+| `image.tag`                                         | Image tag                                                                                                                                                                  | `v0.2.0`                                                 |
 | `image.pullPolicy`                                  | Image pull policy                                                                                                                                                          | `IfNotPresent`                                           |
 | `imagePullSecrets`                                  | Image pull secrets                                                                                                                                                         | `[]`                                                     |
 | `serviceAccount.annotations`                        | Annotations to add to the service account                                                                                                                                  | `{}`                                                     |
@@ -173,12 +188,6 @@ Resource specifications for all klusterlet-managed containers.
 | `resources.requests.memory`                         | fleetconfig controller's memory request                                                                                                                                    | `256Mi`                                                  |
 | `healthCheck.port`                                  | port the liveness & readiness probes are bound to                                                                                                                          | `9440`                                                   |
 | `kubernetesClusterDomain`                           | kubernetes cluster domain                                                                                                                                                  | `cluster.local`                                          |
-
-### cert-manager
-
-| Name                   | Description                      | Value  |
-| ---------------------- | -------------------------------- | ------ |
-| `cert-manager.enabled` | Whether to install cert-manager. | `true` |
 
 ### certificates
 
