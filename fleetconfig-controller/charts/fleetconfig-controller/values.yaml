@@ -294,7 +294,7 @@ imageRegistry: ""
 ## @param image.pullPolicy Image pull policy
 image:
   repository: quay.io/open-cluster-management/fleetconfig-controller
-  tag: v0.2.0
+  tag: v0.2.1
   pullPolicy: IfNotPresent
 
 
