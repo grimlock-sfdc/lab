@@ -72,6 +72,9 @@ func convertManagedClusterToCluster(managedCluster clusterv1.ManagedCluster) mod
 		Status:            "Unknown",
 	}
 
+	// Extract cluster is hub accepted
+	cluster.HubAccepted = managedCluster.Spec.HubAcceptsClient
+
 	// Extract Kubernetes version
 	if managedCluster.Status.Version.Kubernetes != "" {
 		cluster.Version = managedCluster.Status.Version.Kubernetes
