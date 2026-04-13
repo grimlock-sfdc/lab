@@ -1,0 +1,161 @@
+---
+# ManagedClusterSetBinding - binds the "default" ManagedClusterSet to the "default" namespace
+# Required so ManifestWorkReplicaSets in this namespace can target clusters in the set
+apiVersion: cluster.open-cluster-management.io/v1beta2
+kind: ManagedClusterSetBinding
+metadata:
+  name: default
+  namespace: default
+spec:
+  clusterSet: default
+---
+# ManagedClusterSetBinding for the "monitoring" namespace
+apiVersion: cluster.open-cluster-management.io/v1beta2
+kind: ManagedClusterSetBinding
+metadata:
+  name: default
+  namespace: monitoring
+spec:
+  clusterSet: default
+---
+# Ensure the monitoring namespace exists
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: monitoring
+---
+# Placement: select all clusters for the "default" namespace
+apiVersion: cluster.open-cluster-management.io/v1beta1
+kind: Placement
+metadata:
+  name: all-clusters
+  namespace: default
+spec:
+  clusterSets:
+    - default
+---
+# Placement: select all clusters for the "monitoring" namespace
+apiVersion: cluster.open-cluster-management.io/v1beta1
+kind: Placement
+metadata:
+  name: all-clusters
+  namespace: monitoring
+spec:
+  clusterSets:
+    - default
+---
+# ManifestWorkReplicaSet 1: Deploy nginx to all clusters (default namespace)
+apiVersion: work.open-cluster-management.io/v1alpha1
+kind: ManifestWorkReplicaSet
+metadata:
+  name: deploy-nginx
+  namespace: default
+spec:
+  placementRefs:
+    - name: all-clusters
+      rolloutStrategy:
+        type: All
+  manifestWorkTemplate:
+    workload:
+      manifests:
+        - apiVersion: apps/v1
+          kind: Deployment
+          metadata:
+            name: nginx
+            namespace: default
+          spec:
+            replicas: 2
+            selector:
+              matchLabels:
+                app: nginx
+            template:
+              metadata:
+                labels:
+                  app: nginx
+              spec:
+                containers:
+                  - name: nginx
+                    image: nginx:1.25
+                    ports:
+                      - containerPort: 80
+        - apiVersion: v1
+          kind: Service
+          metadata:
+            name: nginx-svc
+            namespace: default
+          spec:
+            selector:
+              app: nginx
+            ports:
+              - port: 80
+                targetPort: 80
+---
+# ManifestWorkReplicaSet 2: Deploy monitoring config to all clusters (monitoring namespace)
+apiVersion: work.open-cluster-management.io/v1alpha1
+kind: ManifestWorkReplicaSet
+metadata:
+  name: monitoring-config
+  namespace: monitoring
+spec:
+  placementRefs:
+    - name: all-clusters
+      rolloutStrategy:
+        type: All
+  manifestWorkTemplate:
+    workload:
+      manifests:
+        - apiVersion: v1
+          kind: Namespace
+          metadata:
+            name: monitoring
+        - apiVersion: v1
+          kind: ConfigMap
+          metadata:
+            name: monitoring-agent-config
+            namespace: monitoring
+          data:
+            config.yaml: |
+              scrape_interval: 30s
+              evaluation_interval: 30s
+        - apiVersion: apps/v1
+          kind: Deployment
+          metadata:
+            name: monitoring-agent
+            namespace: monitoring
+          spec:
+            replicas: 1
+            selector:
+              matchLabels:
+                app: monitoring-agent
+            template:
+              metadata:
+                labels:
+                  app: monitoring-agent
+              spec:
+                containers:
+                  - name: agent
+                    image: busybox:1.36
+                    command: ["sh", "-c", "echo 'monitoring agent running' && sleep infinity"]
+---
+# ManifestWorkReplicaSet 3: Deploy app config (default namespace, separate MWRS)
+apiVersion: work.open-cluster-management.io/v1alpha1
+kind: ManifestWorkReplicaSet
+metadata:
+  name: app-configmaps
+  namespace: default
+spec:
+  placementRefs:
+    - name: all-clusters
+      rolloutStrategy:
+        type: All
+  manifestWorkTemplate:
+    workload:
+      manifests:
+        - apiVersion: v1
+          kind: ConfigMap
+          metadata:
+            name: app-settings
+            namespace: default
+          data:
+            LOG_LEVEL: info
+            FEATURE_FLAGS: "true"
