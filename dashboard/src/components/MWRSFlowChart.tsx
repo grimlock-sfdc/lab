@@ -17,7 +17,8 @@ import '@xyflow/react/dist/style.css';
 import { Box, Typography, Chip, CircularProgress, Alert } from '@mui/material';
 import type { ManifestWorkReplicaSet } from '../api/manifestWorkReplicaSetService';
 import { fetchManifestWorksByReplicaSet } from '../api/manifestWorkReplicaSetService';
-import type { ManifestWork } from '../api/manifestWorkService';
+import type { ManifestWork, StatusFeedbackResult } from '../api/manifestWorkService';
+import StatusFeedbackDisplay from './StatusFeedbackDisplay';
 
 // ── Status helpers ─────────────────────────────────────────────────────────────
 
@@ -87,7 +88,7 @@ function ManifestWorkNode({ data }: { data: MWData }) {
   );
 }
 
-type ResData = { kind: string; name: string; namespace?: string; status: string; path: string };
+type ResData = { kind: string; name: string; namespace?: string; status: string; path: string; feedback?: StatusFeedbackResult };
 
 function ResourceNode({ data }: { data: ResData }) {
   const navigate = useNavigate();
@@ -116,6 +117,11 @@ function ResourceNode({ data }: { data: ResData }) {
         <Typography variant="caption" color="text.secondary" display="block">{data.namespace}</Typography>
       )}
       <Chip label={data.status} size="small" color={chipColor(data.status)} sx={{ mt: 0.75 }} />
+      {data.feedback?.values?.length && (
+        <Box sx={{ mt: 0.5 }}>
+          <StatusFeedbackDisplay feedback={data.feedback} variant="compact" maxItems={2} />
+        </Box>
+      )}
     </Box>
   );
 }
@@ -190,6 +196,7 @@ function buildGraph(mwrs: ManifestWorkReplicaSet, manifestWorks: ManifestWork[])
           namespace: res.resourceMeta.namespace,
           status: deriveResStatus(res.conditions ?? []),
           path: `/resources/${mw.namespace}/${mw.name}/${res.resourceMeta.ordinal}`,
+          feedback: res.statusFeedback,
         },
       });
       edges.push({

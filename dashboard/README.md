@@ -82,6 +82,7 @@ The OCM Dashboard follows a modern architecture pattern for Kubernetes dashboard
 - Table, detail drawer, and full-page detail views for all major OCM resources
 - Flow chart visualizations (MWRS -> ManifestWorks -> Resources, ManifestWork -> Resources) using ReactFlow
 - Overview dashboard with KPIs for clusters, cluster sets, placements, and WorkReplicaSets
+- OCM StatusFeedback display — values synced from spoke clusters (e.g., readyReplicas, clusterIP) shown in resource tables, detail views, and graph nodes
 - Real-time cluster status updates via SSE
 - Authentication flow with token support (bearer token in localStorage)
 - Responsive UI with Material UI components
@@ -92,6 +93,7 @@ The OCM Dashboard follows a modern architecture pattern for Kubernetes dashboard
 - Cross-namespace listing for ManifestWorks, ManifestWorkReplicaSets, and Resources
 - ManifestWorks-by-ReplicaSet endpoint using OCM label selectors
 - Resources extracted from ManifestWork specs with Kind/Cluster/Namespace filtering
+- StatusFeedback extraction from ManifestWork resource status (per-resource feedback values synced from spoke clusters)
 - SSE endpoint for streaming cluster updates
 - OCM typed clients via `open-cluster-management.io/api` v1.2.0
 - Support for in-cluster and out-of-cluster kubeconfig

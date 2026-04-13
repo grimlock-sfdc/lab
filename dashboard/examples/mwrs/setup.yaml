@@ -56,6 +56,30 @@ spec:
       rolloutStrategy:
         type: All
   manifestWorkTemplate:
+    manifestConfigs:
+      - resourceIdentifier:
+          group: apps
+          resource: deployments
+          namespace: default
+          name: nginx
+        feedbackRules:
+          - type: WellKnownStatus
+          - type: JSONPaths
+            jsonPaths:
+              - name: readyReplicas
+                path: '.status.readyReplicas'
+              - name: replicas
+                path: '.status.replicas'
+      - resourceIdentifier:
+          group: ""
+          resource: services
+          namespace: default
+          name: nginx-svc
+        feedbackRules:
+          - type: JSONPaths
+            jsonPaths:
+              - name: clusterIP
+                path: '.spec.clusterIP'
     workload:
       manifests:
         - apiVersion: apps/v1
@@ -102,6 +126,14 @@ spec:
       rolloutStrategy:
         type: All
   manifestWorkTemplate:
+    manifestConfigs:
+      - resourceIdentifier:
+          group: apps
+          resource: deployments
+          namespace: monitoring
+          name: monitoring-agent
+        feedbackRules:
+          - type: WellKnownStatus
     workload:
       manifests:
         - apiVersion: v1

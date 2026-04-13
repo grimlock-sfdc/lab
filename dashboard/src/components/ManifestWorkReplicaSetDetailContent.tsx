@@ -18,12 +18,19 @@ import {
   CheckCircle as CheckCircleIcon,
   Error as ErrorIcon,
   HourglassEmpty as ProgressingIcon,
+  ExpandMore as ExpandMoreIcon,
 } from '@mui/icons-material';
+import {
+  Accordion,
+  AccordionSummary,
+  AccordionDetails,
+} from '@mui/material';
 import type { ManifestWorkReplicaSet } from '../api/manifestWorkReplicaSetService';
 import { fetchManifestWorksByReplicaSet } from '../api/manifestWorkReplicaSetService';
 import type { ManifestWork } from '../api/manifestWorkService';
 import ClusterManifestWorksList from './ClusterManifestWorksList';
 import MWRSFlowChart from './MWRSFlowChart';
+import StatusFeedbackDisplay from './StatusFeedbackDisplay';
 
 interface Props {
   mwrs: ManifestWorkReplicaSet;
@@ -70,15 +77,13 @@ export default function ManifestWorkReplicaSetDetailContent({ mwrs, compact = fa
   const [mwError, setMwError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (tabValue === 1) {
-      setMwLoading(true);
-      setMwError(null);
-      fetchManifestWorksByReplicaSet(mwrs.namespace, mwrs.name)
-        .then(setManifestWorks)
-        .catch((err) => setMwError(err.message || 'Failed to fetch ManifestWorks'))
-        .finally(() => setMwLoading(false));
-    }
-  }, [tabValue, mwrs.namespace, mwrs.name]);
+    setMwLoading(true);
+    setMwError(null);
+    fetchManifestWorksByReplicaSet(mwrs.namespace, mwrs.name)
+      .then(setManifestWorks)
+      .catch((err) => setMwError(err.message || 'Failed to fetch ManifestWorks'))
+      .finally(() => setMwLoading(false));
+  }, [mwrs.namespace, mwrs.name]);
 
   const handleTabChange = (_event: React.SyntheticEvent, newValue: number) => {
     setTabValue(newValue);
@@ -274,7 +279,7 @@ export default function ManifestWorkReplicaSetDetailContent({ mwrs, compact = fa
 
         {/* Conditions */}
         {mwrs.conditions && mwrs.conditions.length > 0 && (
-          <Box>
+          <Box sx={{ mb: 3 }}>
             <Typography variant="subtitle1" sx={{ mb: 1, fontWeight: 'medium' }}>
               Conditions
             </Typography>
@@ -308,6 +313,47 @@ export default function ManifestWorkReplicaSetDetailContent({ mwrs, compact = fa
                 </TableBody>
               </Table>
             </TableContainer>
+          </Box>
+        )}
+
+        {/* Status Feedback (from child ManifestWorks) */}
+        {!mwLoading && manifestWorks.some(mw =>
+          mw.resourceStatus?.manifests?.some(m => m.statusFeedback?.values?.length)
+        ) && (
+          <Box>
+            <Typography variant="subtitle1" sx={{ mb: 1, fontWeight: 'medium' }}>
+              Status Feedback
+            </Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+              Values reported back from spoke clusters via OCM StatusFeedback.
+            </Typography>
+            {manifestWorks
+              .filter(mw => mw.resourceStatus?.manifests?.some(m => m.statusFeedback?.values?.length))
+              .map(mw => (
+                <Accordion key={mw.id} variant="outlined" disableGutters sx={{ mb: 1, '&:before': { display: 'none' } }}>
+                  <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <Typography variant="body2" fontWeight="bold">{mw.namespace}</Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        ({mw.resourceStatus!.manifests!.filter(m => m.statusFeedback?.values?.length).length} resources with feedback)
+                      </Typography>
+                    </Box>
+                  </AccordionSummary>
+                  <AccordionDetails>
+                    {mw.resourceStatus!.manifests!
+                      .filter(m => m.statusFeedback?.values?.length)
+                      .map((manifest, idx) => (
+                        <Box key={idx} sx={{ mb: idx < mw.resourceStatus!.manifests!.filter(m => m.statusFeedback?.values?.length).length - 1 ? 2 : 0 }}>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                            <Chip label={manifest.resourceMeta.kind || 'Resource'} size="small" variant="outlined" />
+                            <Typography variant="body2">{manifest.resourceMeta.name || '-'}</Typography>
+                          </Box>
+                          <StatusFeedbackDisplay feedback={manifest.statusFeedback} variant="table" />
+                        </Box>
+                      ))}
+                  </AccordionDetails>
+                </Accordion>
+              ))}
           </Box>
         )}
       </TabPanel>

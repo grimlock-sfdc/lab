@@ -30,6 +30,24 @@ export interface ManifestResourceStatus {
 export interface ManifestCondition {
   resourceMeta: ManifestResourceMeta;
   conditions: Condition[];
+  statusFeedback?: StatusFeedbackResult;
+}
+
+export interface StatusFeedbackResult {
+  values?: FeedbackValue[];
+}
+
+export interface FeedbackValue {
+  name: string;
+  fieldValue: FieldValue;
+}
+
+export interface FieldValue {
+  type: 'Integer' | 'String' | 'Boolean' | 'JsonRaw';
+  integer?: number;
+  string?: string;
+  boolean?: boolean;
+  jsonRaw?: string;
 }
 
 export interface ManifestResourceMeta {
@@ -67,7 +85,7 @@ export const fetchAllManifestWorks = async (): Promise<ManifestWork[]> => {
             ],
             resourceStatus: {
               manifests: [
-                { resourceMeta: { ordinal: 0, group: "apps", version: "v1", kind: "Deployment", resource: "deployments", name: "nginx", namespace: "default" }, conditions: [{ type: "Applied", status: "True", reason: "AppliedManifestComplete", message: "Resource applied", lastTransitionTime: "2025-05-14T09:37:25Z" }] },
+                { resourceMeta: { ordinal: 0, group: "apps", version: "v1", kind: "Deployment", resource: "deployments", name: "nginx", namespace: "default" }, conditions: [{ type: "Applied", status: "True", reason: "AppliedManifestComplete", message: "Resource applied", lastTransitionTime: "2025-05-14T09:37:25Z" }], statusFeedback: { values: [{ name: "readyReplicas", fieldValue: { type: "Integer", integer: 2 } }, { name: "replicas", fieldValue: { type: "Integer", integer: 2 } }] } },
               ],
             },
           },

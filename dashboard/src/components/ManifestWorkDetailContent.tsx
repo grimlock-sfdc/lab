@@ -15,6 +15,7 @@ import {
 } from '@mui/material';
 import type { ManifestWork } from '../api/manifestWorkService';
 import MWFlowChart from './MWFlowChart';
+import StatusFeedbackDisplay from './StatusFeedbackDisplay';
 
 const getStatusInfo = (mw: ManifestWork): { label: string; color: 'success' | 'error' | 'warning' | 'default' } => {
   const applied = mw.conditions?.find(c => c.type === 'Applied');
@@ -111,6 +112,7 @@ export default function ManifestWorkDetailContent({ mw, compact }: Props) {
                   <TableCell>Name</TableCell>
                   <TableCell>Namespace</TableCell>
                   <TableCell>Status</TableCell>
+                  <TableCell>Status Feedback</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -132,6 +134,9 @@ export default function ManifestWorkDetailContent({ mw, compact }: Props) {
                           size="small"
                           color={resStatus === 'Applied' ? 'success' : resStatus === 'Failed' ? 'error' : 'warning'}
                         />
+                      </TableCell>
+                      <TableCell>
+                        <StatusFeedbackDisplay feedback={res.statusFeedback} variant="inline" maxItems={3} />
                       </TableCell>
                     </TableRow>
                   );

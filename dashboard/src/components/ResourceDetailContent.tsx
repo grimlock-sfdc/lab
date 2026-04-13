@@ -16,6 +16,7 @@ import {
   Paper,
 } from '@mui/material';
 import type { ManagedResource } from '../api/resourceService';
+import StatusFeedbackDisplay from './StatusFeedbackDisplay';
 
 interface Props {
   resource: ManagedResource;
@@ -120,6 +121,13 @@ function OverviewFields({ resource }: { resource: ManagedResource }) {
               </TableBody>
             </Table>
           </TableContainer>
+        </Grid>
+      )}
+
+      {resource.statusFeedback?.values && resource.statusFeedback.values.length > 0 && (
+        <Grid size={{ xs: 12 }}>
+          <Typography variant="subtitle2" sx={{ mt: 1, mb: 1, fontWeight: 'medium' }}>Status Feedback</Typography>
+          <StatusFeedbackDisplay feedback={resource.statusFeedback} variant="table" />
         </Grid>
       )}
     </Grid>

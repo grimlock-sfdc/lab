@@ -140,7 +140,7 @@ The "manifestworks by replica set" endpoint queries ManifestWorks using the OCM 
 | GET | `/api/resources` | `GetManagedResources` | List all resources (supports `kind`, `cluster`, `namespace` query filters) |
 | GET | `/api/resources/:cluster/:manifestwork/:ordinal` | `GetManagedResource` | Get a specific resource (includes raw spec) |
 
-Resources are not standalone Kubernetes objects — they are extracted from ManifestWork specs and enriched with status from `resourceStatus.manifests[]`.
+Resources are not standalone Kubernetes objects — they are extracted from ManifestWork specs and enriched with status and StatusFeedback values from `resourceStatus.manifests[]`.
 
 #### Streaming
 | Method | Path | Handler | Description |
@@ -191,6 +191,7 @@ src/
 │   ├── ResourceListPage.tsx        # Resource table with Kind/Cluster/Namespace filters
 │   ├── ResourceDetailPage.tsx      # Resource full detail
 │   ├── ResourceDetailContent.tsx   # Resource detail content (Overview + Spec tabs)
+│   ├── StatusFeedbackDisplay.tsx   # Shared component for OCM StatusFeedback values (table/inline/compact variants)
 │   └── Login.tsx                   # Login page
 ├── theme/
 │   └── ThemeProvider.tsx           # MUI theme configuration
@@ -222,6 +223,27 @@ Two ReactFlow-based components provide graph visualizations:
 
 Both use custom node types with status-colored borders and chips. Resource nodes are clickable and navigate to `/resources/:cluster/:manifestwork/:ordinal`.
 
+### StatusFeedback Display
+
+OCM's StatusFeedback mechanism allows spoke cluster work agents to sync specific status field values back to the hub via `ManifestCondition.StatusFeedbacks`. This is configured per-resource using `manifestConfigs[].feedbackRules` in the ManifestWorkReplicaSet or ManifestWork spec (e.g., JSONPaths for `.status.readyReplicas` or WellKnownStatus).
+
+The dashboard extracts these feedback values in the backend (`convertManifestWork()` and `convertStatusFeedback()` in `handlers/manifestwork.go`) and exposes them via the API on `ManifestCondition.statusFeedback` and `ManagedResource.statusFeedback`.
+
+**`StatusFeedbackDisplay`** (`src/components/StatusFeedbackDisplay.tsx`) is a shared component with three variants:
+
+| Variant | Rendering | Used in |
+|---------|-----------|---------|
+| `table` | Full table with Name, Type, Value columns | Resource detail, MWRS Overview tab accordions, ClusterManifestWorksList accordions |
+| `inline` | Horizontal `Chip` components (`name: value`) | ManifestWork resources table, ClusterManifestWorksList manifests table |
+| `compact` | Single-line text (`name=value, name=value`) | Flow chart resource nodes (MWFlowChart, MWRSFlowChart) |
+
+StatusFeedback is displayed in:
+- **MWRS Overview tab** — collapsible accordions per cluster, showing feedback for all resources
+- **MWRS ManifestWorks tab** — inline chips in the manifests table + collapsible detail sections per ManifestWork
+- **ManifestWork detail** — "Status Feedback" column in the resources table
+- **Resource detail** — full table in the Status Feedback section
+- **Flow chart nodes** — compact summary below the status chip on resource nodes
+
 ## Deployment
 
 ### Container Images
@@ -247,7 +269,7 @@ Key values:
 `examples/mwrs/setup.yaml` provides sample ManifestWorkReplicaSet resources for testing:
 - ManagedClusterSetBindings for `default` and `monitoring` namespaces
 - Placements selecting all clusters
-- Three MWRS: nginx deployment+service, monitoring agent+config, app configmaps
+- Three MWRS: nginx deployment+service (with FeedbackRules for readyReplicas, replicas, clusterIP), monitoring agent+config (with WellKnownStatus feedback), app configmaps
 
 Apply with: `kubectl apply -f examples/mwrs/setup.yaml`
 

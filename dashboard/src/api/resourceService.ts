@@ -1,5 +1,5 @@
 import { createHeaders } from './utils';
-import type { Condition } from './manifestWorkService';
+import type { Condition, StatusFeedbackResult } from './manifestWorkService';
 
 export type { Condition };
 
@@ -14,6 +14,7 @@ export interface ManagedResource {
   ordinal: number;
   status: string; // "Applied" | "Available" | "Pending" | "Failed"
   conditions?: Condition[];
+  statusFeedback?: StatusFeedbackResult;
   rawResource?: Record<string, unknown>;
 }
 
@@ -44,6 +45,7 @@ const MOCK_RESOURCES: ManagedResource[] = [
     ordinal: 0,
     status: 'Applied',
     conditions: [{ type: 'Applied', status: 'True', reason: 'AppliedManifestComplete', message: 'Resource applied', lastTransitionTime: new Date().toISOString() }],
+    statusFeedback: { values: [{ name: 'readyReplicas', fieldValue: { type: 'Integer', integer: 2 } }, { name: 'replicas', fieldValue: { type: 'Integer', integer: 2 } }] },
     rawResource: { apiVersion: 'apps/v1', kind: 'Deployment', metadata: { name: 'nginx', namespace: 'default' }, spec: { replicas: 2, selector: { matchLabels: { app: 'nginx' } }, template: { metadata: { labels: { app: 'nginx' } }, spec: { containers: [{ name: 'nginx', image: 'nginx:1.21', ports: [{ containerPort: 80 }] }] } } } },
   },
   {
@@ -57,6 +59,7 @@ const MOCK_RESOURCES: ManagedResource[] = [
     ordinal: 1,
     status: 'Applied',
     conditions: [{ type: 'Applied', status: 'True', reason: 'AppliedManifestComplete', message: 'Resource applied', lastTransitionTime: new Date().toISOString() }],
+    statusFeedback: { values: [{ name: 'clusterIP', fieldValue: { type: 'String', string: '10.96.0.42' } }] },
     rawResource: { apiVersion: 'v1', kind: 'Service', metadata: { name: 'nginx-svc', namespace: 'default' }, spec: { selector: { app: 'nginx' }, ports: [{ port: 80, targetPort: 80 }] } },
   },
   {
