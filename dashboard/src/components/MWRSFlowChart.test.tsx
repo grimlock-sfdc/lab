@@ -18,7 +18,7 @@ vi.mock('../api/manifestWorkReplicaSetService', async () => {
   );
   return {
     ...actual,
-    fetchManifestWorksByReplicaSet: (...args: unknown[]) => mockFetchMWs(),
+    fetchManifestWorksByReplicaSet: () => mockFetchMWs(),
   };
 });
 

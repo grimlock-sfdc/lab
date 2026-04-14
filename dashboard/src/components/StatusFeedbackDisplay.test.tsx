@@ -32,7 +32,7 @@ describe('formatValue', () => {
   });
 
   it('returns dash for unknown type', () => {
-    expect(formatValue({ type: 'Unknown' } as FieldValue)).toBe('-');
+    expect(formatValue({ type: 'Unknown' } as unknown as FieldValue)).toBe('-');
   });
 });
 
