@@ -257,3 +257,49 @@ spec:
           data:
             LOG_LEVEL: info
             FEATURE_FLAGS: "true"
+---
+# ManifestWorkReplicaSet 4: Run a one-shot data migration Job on all clusters
+# Demonstrates WellKnownConditions for ConditionRules (vs. the CEL rules above).
+# OCM has built-in WellKnownConditions for Jobs (Complete) and Pods (Complete).
+apiVersion: work.open-cluster-management.io/v1alpha1
+kind: ManifestWorkReplicaSet
+metadata:
+  name: data-migration
+  namespace: default
+spec:
+  placementRefs:
+    - name: all-clusters
+      rolloutStrategy:
+        type: All
+  manifestWorkTemplate:
+    manifestConfigs:
+      - resourceIdentifier:
+          group: batch
+          resource: jobs
+          namespace: default
+          name: data-migration
+        feedbackRules:
+          - type: WellKnownStatus
+        # WellKnownConditions: OCM knows how to evaluate Job completion natively.
+        # For Jobs, "Complete" is true when the Job has a Complete or Failed condition.
+        # This is the ConditionRules equivalent of WellKnownStatus for FeedbackRules —
+        # no CEL expressions needed for standard resource types.
+        conditionRules:
+          - condition: Complete
+            type: WellKnownConditions
+    workload:
+      manifests:
+        - apiVersion: batch/v1
+          kind: Job
+          metadata:
+            name: data-migration
+            namespace: default
+          spec:
+            backoffLimit: 3
+            template:
+              spec:
+                restartPolicy: Never
+                containers:
+                  - name: migrate
+                    image: busybox:1.36
+                    command: ["sh", "-c", "echo 'Running data migration...' && sleep 5 && echo 'Done'"]
