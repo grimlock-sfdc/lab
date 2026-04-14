@@ -83,6 +83,34 @@ spec:
                 path: '.status.replicas'
               - name: SpecReplicas
                 path: '.spec.replicas'
+        # ConditionRules gate MWRS progressive rollout on actual workload health.
+        # Without these, OCM considers a ManifestWork "succeeded" as soon as the
+        # manifests are applied, even if the Deployment is stuck (e.g., bad image pull).
+        conditionRules:
+          - condition: Progressing
+            type: CEL
+            celExpressions:
+              - >-
+                !hasConditions(object.status)
+                || !object.status.conditions.exists(c,
+                c.type == 'Available' && c.status == 'True')
+            messageExpression: >-
+              hasConditions(object.status)
+              && object.status.conditions.exists(c, c.type == 'Available')
+              ? object.status.conditions.filter(c, c.type == 'Available')[0].message
+              : 'Waiting for availability'
+          - condition: Degraded
+            type: CEL
+            celExpressions:
+              - >-
+                hasConditions(object.status)
+                && object.status.conditions.exists(c,
+                c.type == 'Progressing' && c.status == 'False')
+            messageExpression: >-
+              hasConditions(object.status)
+              && object.status.conditions.exists(c, c.type == 'Progressing')
+              ? object.status.conditions.filter(c, c.type == 'Progressing')[0].message
+              : 'Deployment is not progressing'
       - resourceIdentifier:
           group: ""
           resource: services
@@ -147,6 +175,31 @@ spec:
           name: monitoring-agent
         feedbackRules:
           - type: WellKnownStatus
+        conditionRules:
+          - condition: Progressing
+            type: CEL
+            celExpressions:
+              - >-
+                !hasConditions(object.status)
+                || !object.status.conditions.exists(c,
+                c.type == 'Available' && c.status == 'True')
+            messageExpression: >-
+              hasConditions(object.status)
+              && object.status.conditions.exists(c, c.type == 'Available')
+              ? object.status.conditions.filter(c, c.type == 'Available')[0].message
+              : 'Waiting for availability'
+          - condition: Degraded
+            type: CEL
+            celExpressions:
+              - >-
+                hasConditions(object.status)
+                && object.status.conditions.exists(c,
+                c.type == 'Progressing' && c.status == 'False')
+            messageExpression: >-
+              hasConditions(object.status)
+              && object.status.conditions.exists(c, c.type == 'Progressing')
+              ? object.status.conditions.filter(c, c.type == 'Progressing')[0].message
+              : 'Deployment is not progressing'
     workload:
       manifests:
         - apiVersion: v1

@@ -308,7 +308,8 @@ Key values:
 `examples/mwrs/setup.yaml` provides sample ManifestWorkReplicaSet resources for testing:
 - ManagedClusterSetBindings for `default` and `monitoring` namespaces
 - Placements selecting all clusters
-- Three MWRS: nginx deployment+service (with FeedbackRules for readyReplicas, replicas, clusterIP), monitoring agent+config (with WellKnownStatus feedback), app configmaps
+- Three MWRS: nginx deployment+service (with JSONPaths FeedbackRules and CEL ConditionRules for rollout gating), monitoring agent+config (with WellKnownStatus feedback and CEL ConditionRules), app configmaps
+- Both Deployment MWRS include `conditionRules` for `Progressing` (Available != True) and `Degraded` (Progressing = False, i.e., ProgressDeadlineExceeded), which gate MWRS progressive rollout on actual workload health
 
 Apply with: `kubectl apply -f examples/mwrs/setup.yaml`
 
