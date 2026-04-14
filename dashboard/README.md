@@ -80,9 +80,10 @@ The OCM Dashboard follows a modern architecture pattern for Kubernetes dashboard
 
 - Read-only view of clusters, placements, cluster sets, manifest works, WorkReplicaSets, deployed resources, and addons
 - Table, detail drawer, and full-page detail views for all major OCM resources
-- Flow chart visualizations (MWRS -> ManifestWorks -> Resources, ManifestWork -> Resources) using ReactFlow
-- Overview dashboard with KPIs for clusters, cluster sets, placements, and WorkReplicaSets
+- Flow chart visualizations (MWRS -> ManifestWorks -> Resources, ManifestWork -> Resources) using ReactFlow with dagre auto-layout
+- Overview dashboard with KPIs for clusters, cluster sets, placements, and WorkReplicaSets (including degraded/failed counts)
 - OCM StatusFeedback display — values synced from spoke clusters (e.g., readyReplicas, clusterIP) shown in resource tables, detail views, and graph nodes
+- Feedback-aware degraded status detection — identifies unhealthy workloads (Applied but not healthy) using StatusFeedback for Deployments, DaemonSets, Jobs, and Pods. Surfaces degraded state and diagnostic reasons across all dashboard views.
 - Real-time cluster status updates via SSE
 - Authentication flow with token support (bearer token in localStorage)
 - Responsive UI with Material UI components

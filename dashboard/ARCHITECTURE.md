@@ -193,6 +193,10 @@ src/
 │   ├── ResourceDetailContent.tsx   # Resource detail content (Overview + Spec tabs)
 │   ├── StatusFeedbackDisplay.tsx   # Shared component for OCM StatusFeedback values (table/inline/compact variants)
 │   └── Login.tsx                   # Login page
+├── hooks/
+│   └── useAutoLayout.ts            # Dagre-based auto-layout hook for ReactFlow graphs
+├── utils/
+│   └── statusHelpers.ts            # Shared status derivation (degraded detection, border/chip colors)
 ├── theme/
 │   └── ThemeProvider.tsx           # MUI theme configuration
 └── App.tsx                         # Router and route definitions
@@ -223,6 +227,8 @@ Two ReactFlow-based components provide graph visualizations:
 
 Both use custom node types with status-colored borders and chips. Resource nodes are clickable and navigate to `/resources/:cluster/:manifestwork/:ordinal`.
 
+Layout is handled by `useAutoLayout` (`src/hooks/useAutoLayout.ts`), a shared hook that uses `@dagrejs/dagre` for directed-graph auto-layout. Nodes are created at position (0,0), ReactFlow measures their rendered dimensions, then dagre computes optimal positions and `fitView()` is called. This ensures nodes size correctly regardless of content (e.g., StatusFeedback chips of varying length).
+
 ### StatusFeedback Display
 
 OCM's StatusFeedback mechanism allows spoke cluster work agents to sync specific status field values back to the hub via `ManifestCondition.StatusFeedbacks`. This is configured per-resource using `manifestConfigs[].feedbackRules` in the ManifestWorkReplicaSet or ManifestWork spec (e.g., JSONPaths for `.status.readyReplicas` or WellKnownStatus).
@@ -243,6 +249,34 @@ StatusFeedback is displayed in:
 - **ManifestWork detail** — "Status Feedback" column in the resources table
 - **Resource detail** — full table in the Status Feedback section
 - **Flow chart nodes** — compact summary below the status chip on resource nodes
+
+### Degraded Status Detection
+
+OCM's Applied/Available conditions only reflect whether manifests were created on spoke clusters, not whether the underlying workloads are healthy. The dashboard uses StatusFeedback values to detect degraded workloads and surfaces this across all views.
+
+Shared status logic lives in `src/utils/statusHelpers.ts`:
+
+- **`deriveMWStatus(mw)`** — derives ManifestWork status, checking child resource feedback for degraded health
+- **`deriveResStatus(conditions, feedback?)`** — per-resource status, returns "Degraded" when Applied but feedback indicates unhealthy
+- **`deriveMWRSStatus(mwrs, childManifestWorks?)`** — rolls up degraded state from child ManifestWorks
+- **`isFeedbackDegraded(feedback)`** — detects degraded workloads via both JSONPaths (Available=False) and WellKnownStatus patterns for all four OCM resource types:
+
+| Resource | WellKnownStatus Fields | Degraded When |
+|----------|----------------------|---------------|
+| Deployment | `ReadyReplicas`, `Replicas`, `AvailableReplicas` | `ReadyReplicas < Replicas` |
+| DaemonSet | `NumberReady`, `DesiredNumberScheduled`, `NumberAvailable` | `NumberReady < DesiredNumberScheduled` |
+| Job | `JobComplete`, `JobSucceeded` | `JobComplete = "False"` |
+| Pod | `PodReady`, `PodPhase` | `PodReady = "False"` or `PodPhase = "Failed"` |
+
+- **`getDegradedReason(feedback)`** / **`getMWDegradedReasons(mw)`** — extract human-readable diagnostic messages (deployment condition messages, replica counts, pod phase, etc.)
+
+Degraded status is surfaced in:
+- **Overview page** — KPI cards show degraded MWRS count alongside failed count
+- **ManifestWork list** — ManifestWorks with Applied conditions but degraded feedback show as "Degraded"
+- **WorkReplicaSets list** — fetches child ManifestWorks to derive feedback-aware status per MWRS
+- **MWRS detail** — warning Alert with per-cluster, per-resource degraded reasons
+- **ManifestWork detail** — warning Alert listing degraded resources with reasons
+- **Flow chart nodes** — status-colored borders reflect degraded state
 
 ## Deployment
 
@@ -281,6 +315,7 @@ Apply with: `kubectl apply -f examples/mwrs/setup.yaml`
 | `k8s.io/client-go` | v0.34.1 | Kubernetes client |
 | `github.com/gin-gonic/gin` | v1.9.1 | HTTP framework |
 | `@xyflow/react` | ^12.10.2 | Flow chart visualization |
+| `@dagrejs/dagre` | ^3.0.0 | Directed graph auto-layout for flow charts |
 | `@mui/material` | ^7.0.1 | UI component library |
 | `react` | ^19.1.0 | UI framework |
 | `vite` | ^6.3.5 | Build tool and dev server |
