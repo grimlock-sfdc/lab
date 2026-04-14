@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
+  Alert,
   Box,
   Typography,
   Grid,
@@ -31,6 +32,7 @@ import type { ManifestWork } from '../api/manifestWorkService';
 import ClusterManifestWorksList from './ClusterManifestWorksList';
 import MWRSFlowChart from './MWRSFlowChart';
 import StatusFeedbackDisplay from './StatusFeedbackDisplay';
+import { deriveMWRSStatus, chipColor, getMWDegradedReasons } from '../utils/statusHelpers';
 
 interface Props {
   mwrs: ManifestWorkReplicaSet;
@@ -89,25 +91,14 @@ export default function ManifestWorkReplicaSetDetailContent({ mwrs, compact = fa
     setTabValue(newValue);
   };
 
-  const getAppliedStatus = (): string => {
-    const condition = mwrs.conditions?.find(c => c.type === 'ManifestworkApplied');
-    if (condition?.status === 'True') return 'Applied';
-    if (condition?.reason === 'Processing') return 'Progressing';
-    return 'Failed';
-  };
+  const status = deriveMWRSStatus(mwrs, manifestWorks.length > 0 ? manifestWorks : undefined);
 
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case 'Applied':
-        return <CheckCircleIcon sx={{ color: "success.main", fontSize: 18, mr: 0.5 }} />;
-      case 'Progressing':
-        return <ProgressingIcon sx={{ color: "warning.main", fontSize: 18, mr: 0.5 }} />;
-      default:
-        return <ErrorIcon sx={{ color: "error.main", fontSize: 18, mr: 0.5 }} />;
-    }
+  const getStatusIcon = (s: string) => {
+    const color = chipColor(s);
+    if (color === 'success') return <CheckCircleIcon sx={{ color: "success.main", fontSize: 18, mr: 0.5 }} />;
+    if (color === 'warning') return <ProgressingIcon sx={{ color: "warning.main", fontSize: 18, mr: 0.5 }} />;
+    return <ErrorIcon sx={{ color: "error.main", fontSize: 18, mr: 0.5 }} />;
   };
-
-  const status = getAppliedStatus();
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
@@ -156,6 +147,27 @@ export default function ManifestWorkReplicaSetDetailContent({ mwrs, compact = fa
             </Grid>
           </Grid>
         </Box>
+
+        {/* Degraded alert */}
+        {status === 'Degraded' && manifestWorks.length > 0 && (() => {
+          const reasons = manifestWorks.flatMap(mw => {
+            const items = getMWDegradedReasons(mw);
+            return items.map(r => ({ cluster: mw.namespace, ...r }));
+          });
+          if (reasons.length === 0) return null;
+          return (
+            <Alert severity="warning" sx={{ mb: 3 }}>
+              <Typography variant="body2" fontWeight="bold" sx={{ mb: 0.5 }}>
+                Workloads are degraded on {new Set(reasons.map(r => r.cluster)).size} cluster(s)
+              </Typography>
+              {reasons.map((r, i) => (
+                <Typography key={i} variant="body2">
+                  <strong>{r.cluster}</strong> &mdash; {r.resource}: {r.reason}
+                </Typography>
+              ))}
+            </Alert>
+          );
+        })()}
 
         {/* Summary */}
         <Box sx={{ mb: 3 }}>

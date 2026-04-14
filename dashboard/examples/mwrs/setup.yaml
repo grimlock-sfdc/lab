@@ -63,13 +63,26 @@ spec:
           namespace: default
           name: nginx
         feedbackRules:
-          - type: WellKnownStatus
           - type: JSONPaths
             jsonPaths:
-              - name: readyReplicas
+              - name: Available
+                path: ".status.conditions[?(@.type=='Available')].status"
+              - name: AvailableMessage
+                path: ".status.conditions[?(@.type=='Available')].message"
+              - name: Progressing
+                path: ".status.conditions[?(@.type=='Progressing')].status"
+              - name: ProgressingReason
+                path: ".status.conditions[?(@.type=='Progressing')].reason"
+              - name: ProgressingMessage
+                path: ".status.conditions[?(@.type=='Progressing')].message"
+              - name: ReadyReplicas
                 path: '.status.readyReplicas'
-              - name: replicas
+              - name: UnavailableReplicas
+                path: '.status.unavailableReplicas'
+              - name: Replicas
                 path: '.status.replicas'
+              - name: SpecReplicas
+                path: '.spec.replicas'
       - resourceIdentifier:
           group: ""
           resource: services

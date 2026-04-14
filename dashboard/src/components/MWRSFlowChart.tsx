@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   ReactFlow,
+  ReactFlowProvider,
   Background,
   Controls,
   Handle,
@@ -19,39 +20,8 @@ import type { ManifestWorkReplicaSet } from '../api/manifestWorkReplicaSetServic
 import { fetchManifestWorksByReplicaSet } from '../api/manifestWorkReplicaSetService';
 import type { ManifestWork, StatusFeedbackResult } from '../api/manifestWorkService';
 import StatusFeedbackDisplay from './StatusFeedbackDisplay';
-
-// ── Status helpers ─────────────────────────────────────────────────────────────
-
-const borderColor = (status: string) => {
-  if (status === 'Applied' || status === 'Available') return '#4caf50';
-  if (status === 'Progressing' || status === 'Pending') return '#ff9800';
-  if (status === 'Failed') return '#f44336';
-  return '#9e9e9e';
-};
-
-const chipColor = (status: string): 'success' | 'warning' | 'error' | 'default' => {
-  if (status === 'Applied' || status === 'Available') return 'success';
-  if (status === 'Progressing' || status === 'Pending') return 'warning';
-  if (status === 'Failed') return 'error';
-  return 'default';
-};
-
-const deriveMWStatus = (mw: ManifestWork): string => {
-  const applied = mw.conditions?.find(c => c.type === 'Applied');
-  if (applied?.status === 'True') return 'Applied';
-  if (applied?.status === 'False') return 'Failed';
-  const available = mw.conditions?.find(c => c.type === 'Available');
-  if (available?.status === 'True') return 'Available';
-  return 'Pending';
-};
-
-const deriveResStatus = (conditions: { type: string; status: string }[]): string => {
-  if (!conditions?.length) return 'Pending';
-  const applied = conditions.find(c => c.type === 'Applied');
-  if (applied?.status === 'True') return 'Applied';
-  if (applied?.status === 'False') return 'Failed';
-  return 'Pending';
-};
+import { useAutoLayout } from '../hooks/useAutoLayout';
+import { borderColor, chipColor, deriveMWStatus, deriveResStatus } from '../utils/statusHelpers';
 
 // ── Custom node components ──────────────────────────────────────────────────
 
@@ -119,7 +89,7 @@ function ResourceNode({ data }: { data: ResData }) {
       <Chip label={data.status} size="small" color={chipColor(data.status)} sx={{ mt: 0.75 }} />
       {data.feedback?.values?.length && (
         <Box sx={{ mt: 0.5 }}>
-          <StatusFeedbackDisplay feedback={data.feedback} variant="compact" maxItems={2} />
+          <StatusFeedbackDisplay feedback={data.feedback} variant="inline" />
         </Box>
       )}
     </Box>
@@ -132,11 +102,7 @@ const nodeTypes: NodeTypes = {
   resourceNode: ResourceNode as never,
 };
 
-// ── Graph layout ───────────────────────────────────────────────────────────────
-
-const ROW_H = 110;
-const MW_GAP = 24;
-const LX = [50, 390, 730];
+// ── Graph builder ─────────────────────────────────────────────────────────────
 
 function buildGraph(mwrs: ManifestWorkReplicaSet, manifestWorks: ManifestWork[]) {
   const nodes: Node[] = [];
@@ -144,35 +110,29 @@ function buildGraph(mwrs: ManifestWorkReplicaSet, manifestWorks: ManifestWork[])
   const edgeStyle = { stroke: '#bdbdbd' };
   const marker = { type: MarkerType.ArrowClosed, color: '#bdbdbd' };
 
-  let totalH = 0;
-  const layout = manifestWorks.map(mw => {
-    const resources = mw.resourceStatus?.manifests ?? [];
-    const slots = Math.max(1, resources.length);
-    const blockH = slots * ROW_H;
-    const startY = totalH;
-    totalH += blockH + MW_GAP;
-    return { mw, resources, startY, blockH };
-  });
-  if (layout.length === 0) totalH = ROW_H;
-
+  // Derive MWRS status: check if any child MW is degraded
   const mwrsCond = mwrs.conditions?.find(c => c.type === 'ManifestworkApplied');
-  const mwrsStatus = mwrsCond?.status === 'True' ? 'Applied'
-    : mwrsCond?.reason === 'Processing' ? 'Progressing'
-    : 'Pending';
+  let mwrsStatus: string;
+  if (mwrsCond?.status !== 'True') {
+    mwrsStatus = mwrsCond?.reason === 'Processing' ? 'Progressing' : 'Pending';
+  } else {
+    const anyDegraded = manifestWorks.some(mw => deriveMWStatus(mw) === 'Degraded');
+    mwrsStatus = anyDegraded ? 'Degraded' : 'Applied';
+  }
 
   nodes.push({
     id: 'mwrs',
     type: 'mwrsNode',
-    position: { x: LX[0], y: Math.max(0, (totalH - MW_GAP) / 2 - 55) },
+    position: { x: 0, y: 0 },
     data: { name: mwrs.name, namespace: mwrs.namespace, status: mwrsStatus },
   });
 
-  for (const { mw, resources, startY, blockH } of layout) {
+  for (const mw of manifestWorks) {
     const mwId = `mw-${mw.namespace}`;
     nodes.push({
       id: mwId,
       type: 'manifestWorkNode',
-      position: { x: LX[1], y: startY + blockH / 2 - 45 },
+      position: { x: 0, y: 0 },
       data: { cluster: mw.namespace, status: deriveMWStatus(mw) },
     });
     edges.push({
@@ -184,17 +144,18 @@ function buildGraph(mwrs: ManifestWorkReplicaSet, manifestWorks: ManifestWork[])
       style: edgeStyle,
     });
 
-    resources.forEach((res, i) => {
+    const resources = mw.resourceStatus?.manifests ?? [];
+    for (const res of resources) {
       const nodeId = `res-${mw.namespace}-${res.resourceMeta.ordinal}`;
       nodes.push({
         id: nodeId,
         type: 'resourceNode',
-        position: { x: LX[2], y: startY + i * ROW_H },
+        position: { x: 0, y: 0 },
         data: {
           kind: res.resourceMeta.kind ?? 'Resource',
           name: res.resourceMeta.name ?? '-',
           namespace: res.resourceMeta.namespace,
-          status: deriveResStatus(res.conditions ?? []),
+          status: deriveResStatus(res.conditions ?? [], res.statusFeedback),
           path: `/resources/${mw.namespace}/${mw.name}/${res.resourceMeta.ordinal}`,
           feedback: res.statusFeedback,
         },
@@ -207,23 +168,25 @@ function buildGraph(mwrs: ManifestWorkReplicaSet, manifestWorks: ManifestWork[])
         markerEnd: marker,
         style: edgeStyle,
       });
-    });
+    }
   }
 
   return { nodes, edges };
 }
 
-// ── Component ──────────────────────────────────────────────────────────────────
+// ── Inner component (needs ReactFlowProvider context) ─────────────────────────
 
-interface Props {
+interface InnerProps {
   mwrs: ManifestWorkReplicaSet;
 }
 
-export default function MWRSFlowChart({ mwrs }: Props) {
+function MWRSFlowChartInner({ mwrs }: InnerProps) {
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const { requestLayout } = useAutoLayout(edges, { direction: 'LR', nodeSpacing: 30, rankSpacing: 80 });
 
   useEffect(() => {
     setIsLoading(true);
@@ -233,6 +196,7 @@ export default function MWRSFlowChart({ mwrs }: Props) {
         const { nodes: n, edges: e } = buildGraph(mwrs, mws);
         setNodes(n);
         setEdges(e);
+        requestLayout();
       })
       .catch(() => setError('Failed to load ManifestWorks'))
       .finally(() => setIsLoading(false));
@@ -251,21 +215,35 @@ export default function MWRSFlowChart({ mwrs }: Props) {
   }
 
   return (
+    <ReactFlow
+      nodes={nodes}
+      edges={edges}
+      onNodesChange={onNodesChange}
+      onEdgesChange={onEdgesChange}
+      nodeTypes={nodeTypes}
+      fitView
+      fitViewOptions={{ padding: 0.25 }}
+      nodesConnectable={false}
+      deleteKeyCode={null}
+    >
+      <Background color="#e0e0e0" gap={20} />
+      <Controls />
+    </ReactFlow>
+  );
+}
+
+// ── Component ──────────────────────────────────────────────────────────────────
+
+interface Props {
+  mwrs: ManifestWorkReplicaSet;
+}
+
+export default function MWRSFlowChart({ mwrs }: Props) {
+  return (
     <Box sx={{ height: 'calc(100vh - 320px)', minHeight: 420, border: '1px solid', borderColor: 'divider', borderRadius: 2, overflow: 'hidden' }}>
-      <ReactFlow
-        nodes={nodes}
-        edges={edges}
-        onNodesChange={onNodesChange}
-        onEdgesChange={onEdgesChange}
-        nodeTypes={nodeTypes}
-        fitView
-        fitViewOptions={{ padding: 0.25 }}
-        nodesConnectable={false}
-        deleteKeyCode={null}
-      >
-        <Background color="#e0e0e0" gap={20} />
-        <Controls />
-      </ReactFlow>
+      <ReactFlowProvider>
+        <MWRSFlowChartInner mwrs={mwrs} />
+      </ReactFlowProvider>
     </Box>
   );
 }

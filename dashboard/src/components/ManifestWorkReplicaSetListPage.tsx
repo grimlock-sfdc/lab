@@ -32,31 +32,10 @@ import {
 } from "@mui/icons-material";
 import { fetchManifestWorkReplicaSets } from '../api/manifestWorkReplicaSetService';
 import type { ManifestWorkReplicaSet } from '../api/manifestWorkReplicaSetService';
+import { fetchAllManifestWorks } from '../api/manifestWorkService';
+import type { ManifestWork } from '../api/manifestWorkService';
 import DrawerLayout from './layout/DrawerLayout';
-
-const getStatusInfo = (mwrs: ManifestWorkReplicaSet): { label: string; color: 'success' | 'error' | 'warning' | 'default' } => {
-  const appliedCondition = mwrs.conditions?.find(c => c.type === 'ManifestworkApplied');
-  if (appliedCondition) {
-    if (appliedCondition.status === 'True' && appliedCondition.reason === 'AsExpected') {
-      return { label: 'Applied', color: 'success' };
-    }
-    if (appliedCondition.reason === 'Processing') {
-      return { label: 'Processing', color: 'warning' };
-    }
-    if (appliedCondition.status === 'False') {
-      return { label: 'Not Applied', color: 'error' };
-    }
-  }
-  return { label: 'Unknown', color: 'default' };
-};
-
-const getStatusIcon = (mwrs: ManifestWorkReplicaSet) => {
-  const status = getStatusInfo(mwrs);
-  if (status.color === 'success') return <CheckCircleIcon sx={{ color: "success.main" }} />;
-  if (status.color === 'error') return <ErrorIcon sx={{ color: "error.main" }} />;
-  if (status.color === 'warning') return <WarningIcon sx={{ color: "warning.main" }} />;
-  return <ErrorIcon sx={{ color: "text.disabled" }} />;
-};
+import { deriveMWRSStatus, chipColor, buildMWRSChildMap } from '../utils/statusHelpers';
 
 const formatDate = (dateString?: string) => {
   if (!dateString) return '-';
@@ -70,10 +49,27 @@ export default function ManifestWorkReplicaSetListPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [filterNamespace, setFilterNamespace] = useState("all");
   const [items, setItems] = useState<ManifestWorkReplicaSet[]>([]);
+  const [allMWs, setAllMWs] = useState<ManifestWork[]>([]);
   const [loading, setLoading] = useState(true);
 
   const selectedId = searchParams.get('selected');
   const selectedItem = items.find(i => i.id === selectedId);
+
+  const mwrsChildMap = useMemo(() => buildMWRSChildMap(allMWs), [allMWs]);
+
+  const getStatusInfo = (mwrs: ManifestWorkReplicaSet): { label: string; color: 'success' | 'error' | 'warning' | 'default' } => {
+    const childMWs = mwrsChildMap.get(`${mwrs.namespace}/${mwrs.name}`);
+    const label = deriveMWRSStatus(mwrs, childMWs);
+    return { label, color: chipColor(label) };
+  };
+
+  const getStatusIcon = (mwrs: ManifestWorkReplicaSet) => {
+    const status = getStatusInfo(mwrs);
+    if (status.color === 'success') return <CheckCircleIcon sx={{ color: "success.main" }} />;
+    if (status.color === 'error') return <ErrorIcon sx={{ color: "error.main" }} />;
+    if (status.color === 'warning') return <WarningIcon sx={{ color: "warning.main" }} />;
+    return <ErrorIcon sx={{ color: "text.disabled" }} />;
+  };
 
   const uniqueNamespaces = useMemo(() => {
     const namespaces = new Set<string>();
@@ -87,8 +83,12 @@ export default function ManifestWorkReplicaSetListPage() {
     const load = async () => {
       try {
         setLoading(true);
-        const data = await fetchManifestWorkReplicaSets();
-        setItems(data);
+        const [mwrsData, mwData] = await Promise.all([
+          fetchManifestWorkReplicaSets(),
+          fetchAllManifestWorks(),
+        ]);
+        setItems(mwrsData);
+        setAllMWs(mwData);
       } catch (error) {
         console.error('Error fetching ManifestWorkReplicaSets:', error);
       } finally {

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import {
+  Alert,
   Box,
   Typography,
   Paper,
@@ -16,15 +17,7 @@ import {
 import type { ManifestWork } from '../api/manifestWorkService';
 import MWFlowChart from './MWFlowChart';
 import StatusFeedbackDisplay from './StatusFeedbackDisplay';
-
-const getStatusInfo = (mw: ManifestWork): { label: string; color: 'success' | 'error' | 'warning' | 'default' } => {
-  const applied = mw.conditions?.find(c => c.type === 'Applied');
-  if (applied?.status === 'True') return { label: 'Applied', color: 'success' };
-  if (applied?.status === 'False') return { label: 'Failed', color: 'error' };
-  const available = mw.conditions?.find(c => c.type === 'Available');
-  if (available?.status === 'True') return { label: 'Available', color: 'success' };
-  return { label: 'Pending', color: 'warning' };
-};
+import { deriveMWStatus, chipColor, getMWDegradedReasons, deriveResStatus } from '../utils/statusHelpers';
 
 interface Props {
   mw: ManifestWork;
@@ -33,7 +26,9 @@ interface Props {
 
 export default function ManifestWorkDetailContent({ mw, compact }: Props) {
   const [tab, setTab] = useState(0);
-  const status = getStatusInfo(mw);
+  const statusLabel = deriveMWStatus(mw);
+  const statusColor = chipColor(statusLabel);
+  const degradedReasons = getMWDegradedReasons(mw);
 
   const overviewContent = (
     <>
@@ -51,7 +46,7 @@ export default function ManifestWorkDetailContent({ mw, compact }: Props) {
         </Box>
         <Box sx={{ display: "flex", mb: 1 }}>
           <Typography variant="subtitle2" sx={{ width: 140 }}>Status:</Typography>
-          <Chip label={status.label} color={status.color} size="small" />
+          <Chip label={statusLabel} color={statusColor} size="small" />
         </Box>
         <Box sx={{ display: "flex", mb: 1 }}>
           <Typography variant="subtitle2" sx={{ width: 140 }}>Resources:</Typography>
@@ -64,6 +59,17 @@ export default function ManifestWorkDetailContent({ mw, compact }: Props) {
           </Typography>
         </Box>
       </Paper>
+
+      {/* Degraded alert */}
+      {degradedReasons.length > 0 && (
+        <Alert severity="warning" sx={{ mb: 3 }}>
+          {degradedReasons.map((r, i) => (
+            <Typography key={i} variant="body2">
+              <strong>{r.resource}</strong>: {r.reason}
+            </Typography>
+          ))}
+        </Alert>
+      )}
 
       {/* Conditions */}
       {mw.conditions && mw.conditions.length > 0 && (
@@ -117,10 +123,7 @@ export default function ManifestWorkDetailContent({ mw, compact }: Props) {
               </TableHead>
               <TableBody>
                 {mw.resourceStatus.manifests.map((res, idx) => {
-                  const appliedCond = res.conditions?.find(c => c.type === 'Applied');
-                  const resStatus = appliedCond?.status === 'True' ? 'Applied'
-                    : appliedCond?.status === 'False' ? 'Failed'
-                    : 'Pending';
+                  const resStatus = deriveResStatus(res.conditions ?? [], res.statusFeedback);
                   return (
                     <TableRow key={idx}>
                       <TableCell>
@@ -132,7 +135,7 @@ export default function ManifestWorkDetailContent({ mw, compact }: Props) {
                         <Chip
                           label={resStatus}
                           size="small"
-                          color={resStatus === 'Applied' ? 'success' : resStatus === 'Failed' ? 'error' : 'warning'}
+                          color={chipColor(resStatus)}
                         />
                       </TableCell>
                       <TableCell>
