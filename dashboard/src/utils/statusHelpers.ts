@@ -44,10 +44,13 @@ export const deriveMWStatus = (mw: ManifestWork): string => {
 /**
  * Derive resource status from OCM conditions and StatusFeedback.
  *
- * OCM conditions reflect whether the manifest was applied to the spoke cluster.
- * StatusFeedback provides deeper health data synced from the workload itself.
- * When StatusFeedback reports "Available" = "False", the resource is Applied
- * but degraded — the manifest was applied but the workload isn't healthy.
+ * OCM's Applied condition reflects whether the manifest was applied to the spoke
+ * cluster. OCM also supports ConditionRules (CEL/WellKnownConditions) for
+ * Progressing/Degraded/Complete evaluation, which gate MWRS progressive rollout.
+ *
+ * StatusFeedback values (via FeedbackRules) provide additional observability into
+ * workload health. The dashboard uses these to detect degraded workloads — e.g.,
+ * when a Deployment is Applied but has Available=False or ReadyReplicas < Replicas.
  */
 export const deriveResStatus = (
   conditions: { type: string; status: string }[],
@@ -67,8 +70,10 @@ export const deriveResStatus = (
 /**
  * Derive MWRS status from its OCM conditions and child ManifestWorks' feedback.
  *
- * OCM's MWRS conditions only reflect whether manifests were applied.
- * StatusFeedback from child ManifestWorks reveals actual workload health.
+ * OCM's MWRS conditions (ManifestworkApplied) track whether child ManifestWorks
+ * were applied. OCM also supports ConditionRules for rollout gating via
+ * WorkProgressing/WorkDegraded conditions. The dashboard additionally checks
+ * StatusFeedback from child ManifestWorks to surface degraded workload health.
  */
 export const deriveMWRSStatus = (
   mwrs: { conditions?: { type: string; status: string; reason?: string }[] },
@@ -130,11 +135,34 @@ export function getDegradedReason(feedback?: StatusFeedbackResult): string | und
     return progressingMsg || availableMsg || progressingReason;
   }
 
-  // WellKnownStatus pattern: build message from replica counts
-  const replicas = values.find(v => v.name === 'Replicas')?.fieldValue.integer ?? 0;
-  const ready = values.find(v => v.name === 'ReadyReplicas')?.fieldValue.integer ?? 0;
-  if (ready < replicas) {
+  // WellKnownStatus — Deployment: ReadyReplicas vs Replicas
+  const replicas = values.find(v => v.name === 'Replicas')?.fieldValue.integer;
+  const ready = values.find(v => v.name === 'ReadyReplicas')?.fieldValue.integer;
+  if (replicas != null && ready != null && ready < replicas) {
     return `${ready}/${replicas} replicas ready`;
+  }
+
+  // WellKnownStatus — DaemonSet: NumberReady vs DesiredNumberScheduled
+  const desired = values.find(v => v.name === 'DesiredNumberScheduled')?.fieldValue.integer;
+  const numReady = values.find(v => v.name === 'NumberReady')?.fieldValue.integer;
+  if (desired != null && numReady != null && numReady < desired) {
+    return `${numReady}/${desired} pods ready`;
+  }
+
+  // WellKnownStatus — Job: explicit failure
+  const jobComplete = values.find(v => v.name === 'JobComplete')?.fieldValue.string;
+  if (jobComplete === 'False') {
+    return 'Job has not completed';
+  }
+
+  // WellKnownStatus — Pod: not ready or failed phase
+  const podPhase = values.find(v => v.name === 'PodPhase')?.fieldValue.string;
+  const podReady = values.find(v => v.name === 'PodReady')?.fieldValue.string;
+  if (podPhase === 'Failed') {
+    return 'Pod failed';
+  }
+  if (podReady === 'False') {
+    return `Pod not ready (phase: ${podPhase ?? 'Unknown'})`;
   }
 
   return 'Workload is not available';
@@ -160,9 +188,14 @@ export function getMWDegradedReasons(mw: ManifestWork): { resource: string; reas
 /**
  * Check whether StatusFeedback values indicate a degraded workload.
  *
- * Supports two patterns:
- * - JSONPaths: checks for an "Available" feedback value of "False"
- * - WellKnownStatus: checks if ReadyReplicas < Replicas (replica count mismatch)
+ * Supports both JSONPaths and WellKnownStatus patterns for the four resource
+ * types OCM defines WellKnownStatus rules for:
+ *   - Deployment: ReadyReplicas < Replicas
+ *   - DaemonSet:  NumberReady < DesiredNumberScheduled
+ *   - Job:        JobComplete = "False"
+ *   - Pod:        PodReady = "False" or PodPhase = "Failed"
+ *
+ * See open-cluster-management-io/ocm pkg/work/spoke/statusfeedback/rules/rule.go
  */
 function isFeedbackDegraded(feedback?: StatusFeedbackResult): boolean {
   if (!feedback?.values?.length) return false;
@@ -173,12 +206,36 @@ function isFeedbackDegraded(feedback?: StatusFeedbackResult): boolean {
     return true;
   }
 
-  // WellKnownStatus pattern: replica count mismatch
+  // WellKnownStatus — Deployment: ReadyReplicas < Replicas
   const replicas = feedback.values.find(v => v.name === 'Replicas');
   const readyReplicas = feedback.values.find(v => v.name === 'ReadyReplicas');
   if (replicas?.fieldValue.type === 'Integer' && replicas.fieldValue.integer != null) {
     const ready = readyReplicas?.fieldValue.type === 'Integer' ? (readyReplicas.fieldValue.integer ?? 0) : 0;
     if (ready < replicas.fieldValue.integer) return true;
+  }
+
+  // WellKnownStatus — DaemonSet: NumberReady < DesiredNumberScheduled
+  const desired = feedback.values.find(v => v.name === 'DesiredNumberScheduled');
+  const numReady = feedback.values.find(v => v.name === 'NumberReady');
+  if (desired?.fieldValue.type === 'Integer' && desired.fieldValue.integer != null) {
+    const ready = numReady?.fieldValue.type === 'Integer' ? (numReady.fieldValue.integer ?? 0) : 0;
+    if (ready < desired.fieldValue.integer) return true;
+  }
+
+  // WellKnownStatus — Job: JobComplete = "False"
+  const jobComplete = feedback.values.find(v => v.name === 'JobComplete');
+  if (jobComplete?.fieldValue.type === 'String' && jobComplete.fieldValue.string === 'False') {
+    return true;
+  }
+
+  // WellKnownStatus — Pod: PodReady = "False" or PodPhase = "Failed"
+  const podReady = feedback.values.find(v => v.name === 'PodReady');
+  if (podReady?.fieldValue.type === 'String' && podReady.fieldValue.string === 'False') {
+    return true;
+  }
+  const podPhase = feedback.values.find(v => v.name === 'PodPhase');
+  if (podPhase?.fieldValue.type === 'String' && podPhase.fieldValue.string === 'Failed') {
+    return true;
   }
 
   return false;
