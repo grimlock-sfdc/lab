@@ -252,7 +252,12 @@ StatusFeedback is displayed in:
 
 ### Degraded Status Detection
 
-OCM's Applied/Available conditions only reflect whether manifests were created on spoke clusters, not whether the underlying workloads are healthy. The dashboard uses StatusFeedback values to detect degraded workloads and surfaces this across all views.
+OCM provides two mechanisms for workload health on spoke clusters:
+
+1. **ConditionRules** — CEL expressions or WellKnownConditions evaluated against resources, producing per-manifest `Progressing`, `Degraded`, and `Complete` conditions. These aggregate into work-level `WorkProgressing` and `WorkDegraded` conditions that the MWRS rollout controller uses for progressive rollout gating (e.g., `Progressing=False` → Succeeded, `Progressing=True + Degraded=True` → Failed).
+2. **FeedbackRules** — sync specific status field values (e.g., `readyReplicas`, `clusterIP`) back to the hub for observability. These are displayed throughout the dashboard and also used to detect degraded workloads when ConditionRules are not configured.
+
+The dashboard's `Applied`/`Available` conditions reflect manifest application and resource existence. The dashboard additionally inspects StatusFeedback values to detect degraded workloads — for example, a Deployment that is Applied but has `ReadyReplicas < Replicas` or `Available=False`.
 
 Shared status logic lives in `src/utils/statusHelpers.ts`:
 

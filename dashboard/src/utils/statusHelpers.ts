@@ -44,10 +44,13 @@ export const deriveMWStatus = (mw: ManifestWork): string => {
 /**
  * Derive resource status from OCM conditions and StatusFeedback.
  *
- * OCM conditions reflect whether the manifest was applied to the spoke cluster.
- * StatusFeedback provides deeper health data synced from the workload itself.
- * When StatusFeedback reports "Available" = "False", the resource is Applied
- * but degraded — the manifest was applied but the workload isn't healthy.
+ * OCM's Applied condition reflects whether the manifest was applied to the spoke
+ * cluster. OCM also supports ConditionRules (CEL/WellKnownConditions) for
+ * Progressing/Degraded/Complete evaluation, which gate MWRS progressive rollout.
+ *
+ * StatusFeedback values (via FeedbackRules) provide additional observability into
+ * workload health. The dashboard uses these to detect degraded workloads — e.g.,
+ * when a Deployment is Applied but has Available=False or ReadyReplicas < Replicas.
  */
 export const deriveResStatus = (
   conditions: { type: string; status: string }[],
@@ -67,8 +70,10 @@ export const deriveResStatus = (
 /**
  * Derive MWRS status from its OCM conditions and child ManifestWorks' feedback.
  *
- * OCM's MWRS conditions only reflect whether manifests were applied.
- * StatusFeedback from child ManifestWorks reveals actual workload health.
+ * OCM's MWRS conditions (ManifestworkApplied) track whether child ManifestWorks
+ * were applied. OCM also supports ConditionRules for rollout gating via
+ * WorkProgressing/WorkDegraded conditions. The dashboard additionally checks
+ * StatusFeedback from child ManifestWorks to surface degraded workload health.
  */
 export const deriveMWRSStatus = (
   mwrs: { conditions?: { type: string; status: string; reason?: string }[] },
