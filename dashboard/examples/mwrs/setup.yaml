@@ -56,6 +56,43 @@ spec:
       rolloutStrategy:
         type: All
   manifestWorkTemplate:
+    manifestConfigs:
+      - resourceIdentifier:
+          group: apps
+          resource: deployments
+          namespace: default
+          name: nginx
+        feedbackRules:
+          - type: JSONPaths
+            jsonPaths:
+              - name: Available
+                path: ".status.conditions[?(@.type=='Available')].status"
+              - name: AvailableMessage
+                path: ".status.conditions[?(@.type=='Available')].message"
+              - name: Progressing
+                path: ".status.conditions[?(@.type=='Progressing')].status"
+              - name: ProgressingReason
+                path: ".status.conditions[?(@.type=='Progressing')].reason"
+              - name: ProgressingMessage
+                path: ".status.conditions[?(@.type=='Progressing')].message"
+              - name: ReadyReplicas
+                path: '.status.readyReplicas'
+              - name: UnavailableReplicas
+                path: '.status.unavailableReplicas'
+              - name: Replicas
+                path: '.status.replicas'
+              - name: SpecReplicas
+                path: '.spec.replicas'
+      - resourceIdentifier:
+          group: ""
+          resource: services
+          namespace: default
+          name: nginx-svc
+        feedbackRules:
+          - type: JSONPaths
+            jsonPaths:
+              - name: clusterIP
+                path: '.spec.clusterIP'
     workload:
       manifests:
         - apiVersion: apps/v1
@@ -102,6 +139,14 @@ spec:
       rolloutStrategy:
         type: All
   manifestWorkTemplate:
+    manifestConfigs:
+      - resourceIdentifier:
+          group: apps
+          resource: deployments
+          namespace: monitoring
+          name: monitoring-agent
+        feedbackRules:
+          - type: WellKnownStatus
     workload:
       manifests:
         - apiVersion: v1

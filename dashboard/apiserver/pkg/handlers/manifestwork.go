@@ -14,6 +14,24 @@ import (
 	"open-cluster-management-io/lab/apiserver/pkg/models"
 )
 
+// convertStatusFeedback converts OCM StatusFeedbackResult to our API model
+func convertStatusFeedback(sf workv1.StatusFeedbackResult) *models.StatusFeedbackResult {
+	result := &models.StatusFeedbackResult{}
+	for _, fv := range sf.Values {
+		val := models.FeedbackValue{
+			Name: fv.Name,
+			Value: models.FieldValue{
+				Type:    string(fv.Value.Type),
+				Integer: fv.Value.Integer,
+				String:  fv.Value.String,
+				Boolean: fv.Value.Boolean,
+			},
+		}
+		result.Values = append(result.Values, val)
+	}
+	return result
+}
+
 // convertManifestWork converts a typed ManifestWork to our API model
 func convertManifestWork(item workv1.ManifestWork) models.ManifestWork {
 	mw := models.ManifestWork{
@@ -69,6 +87,9 @@ func convertManifestWork(item workv1.ManifestWork) models.ManifestWork {
 					Reason:             condition.Reason,
 					Message:            condition.Message,
 				})
+			}
+			if len(ms.StatusFeedbacks.Values) > 0 {
+				mc.StatusFeedback = convertStatusFeedback(ms.StatusFeedbacks)
 			}
 			mw.ResourceStatus.Manifests[i] = mc
 		}

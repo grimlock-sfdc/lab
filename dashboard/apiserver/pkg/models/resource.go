@@ -12,6 +12,7 @@ type ManagedResource struct {
 	Ordinal          int                    `json:"ordinal"`
 	Status           string                 `json:"status"`                // "Applied", "Available", "Pending", "Failed"
 	Conditions       []Condition            `json:"conditions,omitempty"`
+	StatusFeedback   *StatusFeedbackResult  `json:"statusFeedback,omitempty"`
 	RawResource      map[string]interface{} `json:"rawResource,omitempty"`
 }
 

@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"time"
@@ -100,65 +99,7 @@ func GetManifestWorksByReplicaSet(c *gin.Context, ocmClient *client.OCMClient, c
 
 	manifestWorks := make([]models.ManifestWork, 0, len(list.Items))
 	for _, item := range list.Items {
-		mw := models.ManifestWork{
-			ID:                string(item.GetUID()),
-			Name:              item.GetName(),
-			Namespace:         item.GetNamespace(),
-			Labels:            item.GetLabels(),
-			CreationTimestamp: item.GetCreationTimestamp().Format(time.RFC3339),
-		}
-
-		// Process manifests
-		if len(item.Spec.Workload.Manifests) > 0 {
-			mw.Manifests = make([]models.Manifest, len(item.Spec.Workload.Manifests))
-			for i, manifest := range item.Spec.Workload.Manifests {
-				var rawObj map[string]interface{}
-				if err := json.Unmarshal(manifest.Raw, &rawObj); err == nil {
-					mw.Manifests[i] = models.Manifest{RawExtension: rawObj}
-				}
-			}
-		}
-
-		// Extract conditions
-		for _, condition := range item.Status.Conditions {
-			mw.Conditions = append(mw.Conditions, models.Condition{
-				Type:               string(condition.Type),
-				Status:             string(condition.Status),
-				LastTransitionTime: condition.LastTransitionTime.Format(time.RFC3339),
-				Reason:             condition.Reason,
-				Message:            condition.Message,
-			})
-		}
-
-		// Process resource status
-		if len(item.Status.ResourceStatus.Manifests) > 0 {
-			mw.ResourceStatus.Manifests = make([]models.ManifestCondition, len(item.Status.ResourceStatus.Manifests))
-			for i, ms := range item.Status.ResourceStatus.Manifests {
-				mc := models.ManifestCondition{
-					ResourceMeta: models.ManifestResourceMeta{
-						Ordinal:   ms.ResourceMeta.Ordinal,
-						Group:     ms.ResourceMeta.Group,
-						Version:   ms.ResourceMeta.Version,
-						Kind:      ms.ResourceMeta.Kind,
-						Resource:  ms.ResourceMeta.Resource,
-						Name:      ms.ResourceMeta.Name,
-						Namespace: ms.ResourceMeta.Namespace,
-					},
-				}
-				for _, condition := range ms.Conditions {
-					mc.Conditions = append(mc.Conditions, models.Condition{
-						Type:               string(condition.Type),
-						Status:             string(condition.Status),
-						LastTransitionTime: condition.LastTransitionTime.Format(time.RFC3339),
-						Reason:             condition.Reason,
-						Message:            condition.Message,
-					})
-				}
-				mw.ResourceStatus.Manifests[i] = mc
-			}
-		}
-
-		manifestWorks = append(manifestWorks, mw)
+		manifestWorks = append(manifestWorks, convertManifestWork(item))
 	}
 
 	c.JSON(http.StatusOK, manifestWorks)

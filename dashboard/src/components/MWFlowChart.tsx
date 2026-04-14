@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   ReactFlow,
+  ReactFlowProvider,
   Background,
   Controls,
   Handle,
@@ -13,40 +14,10 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { Box, Typography, Chip } from '@mui/material';
-import type { ManifestWork } from '../api/manifestWorkService';
-
-// ── Status helpers ─────────────────────────────────────────────────────────────
-
-const borderColor = (status: string) => {
-  if (status === 'Applied' || status === 'Available') return '#4caf50';
-  if (status === 'Progressing' || status === 'Pending') return '#ff9800';
-  if (status === 'Failed') return '#f44336';
-  return '#9e9e9e';
-};
-
-const chipColor = (status: string): 'success' | 'warning' | 'error' | 'default' => {
-  if (status === 'Applied' || status === 'Available') return 'success';
-  if (status === 'Progressing' || status === 'Pending') return 'warning';
-  if (status === 'Failed') return 'error';
-  return 'default';
-};
-
-const deriveMWStatus = (mw: ManifestWork): string => {
-  const applied = mw.conditions?.find(c => c.type === 'Applied');
-  if (applied?.status === 'True') return 'Applied';
-  if (applied?.status === 'False') return 'Failed';
-  const available = mw.conditions?.find(c => c.type === 'Available');
-  if (available?.status === 'True') return 'Available';
-  return 'Pending';
-};
-
-const deriveResStatus = (conditions: { type: string; status: string }[]): string => {
-  if (!conditions?.length) return 'Pending';
-  const applied = conditions.find(c => c.type === 'Applied');
-  if (applied?.status === 'True') return 'Applied';
-  if (applied?.status === 'False') return 'Failed';
-  return 'Pending';
-};
+import type { ManifestWork, StatusFeedbackResult } from '../api/manifestWorkService';
+import StatusFeedbackDisplay from './StatusFeedbackDisplay';
+import { useAutoLayout } from '../hooks/useAutoLayout';
+import { borderColor, chipColor, deriveMWStatus, deriveResStatus } from '../utils/statusHelpers';
 
 // ── Custom node components ──────────────────────────────────────────────────
 
@@ -67,7 +38,7 @@ function MWNode({ data }: { data: MWData }) {
   );
 }
 
-type ResData = { kind: string; name: string; namespace?: string; status: string; path: string };
+type ResData = { kind: string; name: string; namespace?: string; status: string; path: string; feedback?: StatusFeedbackResult };
 
 function ResourceNode({ data }: { data: ResData }) {
   const navigate = useNavigate();
@@ -96,6 +67,11 @@ function ResourceNode({ data }: { data: ResData }) {
         <Typography variant="caption" color="text.secondary" display="block">{data.namespace}</Typography>
       )}
       <Chip label={data.status} size="small" color={chipColor(data.status)} sx={{ mt: 0.75 }} />
+      {data.feedback?.values?.length && (
+        <Box sx={{ mt: 0.5 }}>
+          <StatusFeedbackDisplay feedback={data.feedback} variant="inline" />
+        </Box>
+      )}
     </Box>
   );
 }
@@ -105,10 +81,7 @@ const nodeTypes: NodeTypes = {
   resourceNode: ResourceNode as never,
 };
 
-// ── Graph layout ───────────────────────────────────────────────────────────────
-
-const ROW_H = 110;
-const LX = [50, 450];
+// ── Graph builder ─────────────────────────────────────────────────────────────
 
 function buildGraph(mw: ManifestWork) {
   const nodes: Node[] = [];
@@ -116,30 +89,27 @@ function buildGraph(mw: ManifestWork) {
   const edgeStyle = { stroke: '#bdbdbd' };
   const marker = { type: MarkerType.ArrowClosed, color: '#bdbdbd' };
 
-  const resources = mw.resourceStatus?.manifests ?? [];
-  const totalH = Math.max(1, resources.length) * ROW_H;
-
-  const mwStatus = deriveMWStatus(mw);
-
   nodes.push({
     id: 'mw',
     type: 'mwNode',
-    position: { x: LX[0], y: Math.max(0, totalH / 2 - 55) },
-    data: { name: mw.name, cluster: mw.namespace, status: mwStatus },
+    position: { x: 0, y: 0 },
+    data: { name: mw.name, cluster: mw.namespace, status: deriveMWStatus(mw) },
   });
 
-  resources.forEach((res, i) => {
+  const resources = mw.resourceStatus?.manifests ?? [];
+  resources.forEach((res) => {
     const nodeId = `res-${res.resourceMeta.ordinal}`;
     nodes.push({
       id: nodeId,
       type: 'resourceNode',
-      position: { x: LX[1], y: i * ROW_H },
+      position: { x: 0, y: 0 },
       data: {
         kind: res.resourceMeta.kind ?? 'Resource',
         name: res.resourceMeta.name ?? '-',
         namespace: res.resourceMeta.namespace,
-        status: deriveResStatus(res.conditions ?? []),
+        status: deriveResStatus(res.conditions ?? [], res.statusFeedback),
         path: `/resources/${mw.namespace}/${mw.name}/${res.resourceMeta.ordinal}`,
+        feedback: res.statusFeedback,
       },
     });
     edges.push({
@@ -155,6 +125,30 @@ function buildGraph(mw: ManifestWork) {
   return { nodes, edges };
 }
 
+// ── Inner component (needs ReactFlowProvider context) ─────────────────────────
+
+function MWFlowChartInner({ mw }: { mw: ManifestWork }) {
+  const { nodes, edges } = useMemo(() => buildGraph(mw), [mw]);
+
+  useAutoLayout(edges, { direction: 'LR', nodeSpacing: 30, rankSpacing: 80 });
+
+  return (
+    <ReactFlow
+      nodes={nodes}
+      edges={edges}
+      nodeTypes={nodeTypes}
+      fitView
+      fitViewOptions={{ padding: 0.25 }}
+      nodesConnectable={false}
+      nodesDraggable={false}
+      deleteKeyCode={null}
+    >
+      <Background color="#e0e0e0" gap={20} />
+      <Controls />
+    </ReactFlow>
+  );
+}
+
 // ── Component ──────────────────────────────────────────────────────────────────
 
 interface Props {
@@ -162,8 +156,6 @@ interface Props {
 }
 
 export default function MWFlowChart({ mw }: Props) {
-  const { nodes, edges } = useMemo(() => buildGraph(mw), [mw]);
-
   if (!mw.resourceStatus?.manifests?.length) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', py: 6 }}>
@@ -174,19 +166,9 @@ export default function MWFlowChart({ mw }: Props) {
 
   return (
     <Box sx={{ height: 'calc(100vh - 320px)', minHeight: 420, border: '1px solid', borderColor: 'divider', borderRadius: 2, overflow: 'hidden' }}>
-      <ReactFlow
-        nodes={nodes}
-        edges={edges}
-        nodeTypes={nodeTypes}
-        fitView
-        fitViewOptions={{ padding: 0.25 }}
-        nodesConnectable={false}
-        nodesDraggable={false}
-        deleteKeyCode={null}
-      >
-        <Background color="#e0e0e0" gap={20} />
-        <Controls />
-      </ReactFlow>
+      <ReactFlowProvider>
+        <MWFlowChartInner mw={mw} />
+      </ReactFlowProvider>
     </Box>
   );
 }

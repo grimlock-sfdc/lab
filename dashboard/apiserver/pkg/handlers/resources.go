@@ -83,8 +83,9 @@ func GetManagedResources(c *gin.Context, ocmClient *client.OCMClient, ctx contex
 		cluster := mw.GetNamespace()
 		mwName := mw.GetName()
 
-		// Build status lookup: ordinal -> conditions
+		// Build status and feedback lookups: ordinal -> conditions/feedback
 		statusByOrdinal := map[int32][]models.Condition{}
+		feedbackByOrdinal := map[int32]*models.StatusFeedbackResult{}
 		for _, ms := range mw.Status.ResourceStatus.Manifests {
 			var conds []models.Condition
 			for _, cond := range ms.Conditions {
@@ -97,6 +98,9 @@ func GetManagedResources(c *gin.Context, ocmClient *client.OCMClient, ctx contex
 				})
 			}
 			statusByOrdinal[ms.ResourceMeta.Ordinal] = conds
+			if len(ms.StatusFeedbacks.Values) > 0 {
+				feedbackByOrdinal[ms.ResourceMeta.Ordinal] = convertStatusFeedback(ms.StatusFeedbacks)
+			}
 		}
 
 		for i, manifest := range mw.Spec.Workload.Manifests {
@@ -135,6 +139,7 @@ func GetManagedResources(c *gin.Context, ocmClient *client.OCMClient, ctx contex
 				Ordinal:          i,
 				Status:           status,
 				Conditions:       conditions,
+				StatusFeedback:   feedbackByOrdinal[int32(i)],
 			}
 			if includeSpec {
 				resource.RawResource = rawObj
@@ -206,6 +211,7 @@ func GetManagedResource(c *gin.Context, ocmClient *client.OCMClient, ctx context
 
 	// Find matching status entry
 	var conditions []models.Condition
+	var feedback *models.StatusFeedbackResult
 	for _, ms := range mw.Status.ResourceStatus.Manifests {
 		if int(ms.ResourceMeta.Ordinal) == ordinal {
 			for _, cond := range ms.Conditions {
@@ -216,6 +222,9 @@ func GetManagedResource(c *gin.Context, ocmClient *client.OCMClient, ctx context
 					Reason:             cond.Reason,
 					Message:            cond.Message,
 				})
+			}
+			if len(ms.StatusFeedbacks.Values) > 0 {
+				feedback = convertStatusFeedback(ms.StatusFeedbacks)
 			}
 			break
 		}
@@ -232,6 +241,7 @@ func GetManagedResource(c *gin.Context, ocmClient *client.OCMClient, ctx context
 		Ordinal:          ordinal,
 		Status:           deriveResourceStatus(conditions),
 		Conditions:       conditions,
+		StatusFeedback:   feedback,
 		RawResource:      rawObj,
 	})
 }

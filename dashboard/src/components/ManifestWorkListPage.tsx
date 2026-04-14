@@ -34,14 +34,11 @@ import { fetchAllManifestWorks } from '../api/manifestWorkService';
 import type { ManifestWork } from '../api/manifestWorkService';
 import DrawerLayout from './layout/DrawerLayout';
 import ManifestWorkDetailContent from './ManifestWorkDetailContent';
+import { deriveMWStatus, chipColor } from '../utils/statusHelpers';
 
 const getStatusInfo = (mw: ManifestWork): { label: string; color: 'success' | 'error' | 'warning' | 'default' } => {
-  const applied = mw.conditions?.find(c => c.type === 'Applied');
-  if (applied?.status === 'True') return { label: 'Applied', color: 'success' };
-  if (applied?.status === 'False') return { label: 'Failed', color: 'error' };
-  const available = mw.conditions?.find(c => c.type === 'Available');
-  if (available?.status === 'True') return { label: 'Available', color: 'success' };
-  return { label: 'Pending', color: 'warning' };
+  const label = deriveMWStatus(mw);
+  return { label, color: chipColor(label) };
 };
 
 const getStatusIcon = (mw: ManifestWork) => {

@@ -1,15 +1,18 @@
 import { Box, Typography, Paper, Grid, alpha, useTheme, Chip } from "@mui/material"
 import { Storage as StorageIcon, Layers as LayersIcon, DeviceHub as DeviceHubIcon, DynamicFeed as DynamicFeedIcon } from "@mui/icons-material"
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { fetchClusters } from "../api/clusterService"
 import { fetchClusterSets } from "../api/clusterSetService"
 import { fetchPlacements } from "../api/placementService"
 import { fetchManifestWorkReplicaSets } from "../api/manifestWorkReplicaSetService"
+import { fetchAllManifestWorks } from "../api/manifestWorkService"
 import type { Cluster } from "../api/clusterService"
 import type { ClusterSet } from "../api/clusterSetService"
 import type { Placement } from "../api/placementService"
 import type { ManifestWorkReplicaSet } from "../api/manifestWorkReplicaSetService"
+import type { ManifestWork } from "../api/manifestWorkService"
+import { deriveMWRSStatus, buildMWRSChildMap } from "../utils/statusHelpers"
 
 export default function OverviewPage() {
   const theme = useTheme()
@@ -18,6 +21,7 @@ export default function OverviewPage() {
   const [clusterSets, setClusterSets] = useState<ClusterSet[]>([])
   const [placements, setPlacements] = useState<Placement[]>([])
   const [mwrsList, setMwrsList] = useState<ManifestWorkReplicaSet[]>([])
+  const [allMWs, setAllMWs] = useState<ManifestWork[]>([])
   const [loading, setLoading] = useState(true)
   const [clusterSetsLoading, setClusterSetsLoading] = useState(true)
   const [placementsLoading, setPlacementsLoading] = useState(true)
@@ -67,8 +71,12 @@ export default function OverviewPage() {
     const loadMwrs = async () => {
       setMwrsLoading(true)
       try {
-        const data = await fetchManifestWorkReplicaSets()
-        setMwrsList(data)
+        const [mwrsData, mwData] = await Promise.all([
+          fetchManifestWorkReplicaSets(),
+          fetchAllManifestWorks(),
+        ])
+        setMwrsList(mwrsData)
+        setAllMWs(mwData)
       } finally {
         setMwrsLoading(false)
       }
@@ -139,14 +147,20 @@ export default function OverviewPage() {
   const totalPlacements = placements.length
   const successfulPlacements = placements.filter(p => p.succeeded).length
 
+  const mwrsChildMap = useMemo(() => buildMWRSChildMap(allMWs), [allMWs])
+
   const totalMwrs = mwrsList.length
   const appliedMwrs = mwrsList.filter(m => {
-    const cond = m.conditions?.find(c => c.type === 'ManifestworkApplied')
-    return cond?.status === 'True' && cond?.reason === 'AsExpected'
+    const childMWs = mwrsChildMap.get(`${m.namespace}/${m.name}`)
+    return deriveMWRSStatus(m, childMWs) === 'Applied'
   }).length
+  const degradedMwrs = mwrsList.filter(m => {
+    const childMWs = mwrsChildMap.get(`${m.namespace}/${m.name}`)
+    return deriveMWRSStatus(m, childMWs) === 'Degraded'
+  })
   const failedMwrs = mwrsList.filter(m => {
-    const cond = m.conditions?.find(c => c.type === 'ManifestworkApplied')
-    return cond?.status === 'False' || cond?.reason === 'NotAsExpected'
+    const childMWs = mwrsChildMap.get(`${m.namespace}/${m.name}`)
+    return deriveMWRSStatus(m, childMWs) === 'Failed'
   })
 
   return (
@@ -485,30 +499,61 @@ export default function OverviewPage() {
             </Box>
 
             <Box sx={{ mt: "auto" }}>
-              {!mwrsLoading && failedMwrs.length > 0 ? (
-                <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5, alignItems: "center" }}>
-                  <Typography variant="body2" color="error.main" sx={{ mr: 0.5 }}>
-                    {failedMwrs.length} failed:
-                  </Typography>
-                  {failedMwrs.slice(0, 3).map(m => (
-                    <Chip
-                      key={m.id}
-                      label={`${m.namespace}/${m.name}`}
-                      size="small"
-                      color="error"
-                      variant="outlined"
-                      clickable
-                      onClick={() => navigate(`/manifestworkreplicasets/${m.namespace}/${m.name}`)}
-                    />
-                  ))}
-                  {failedMwrs.length > 3 && (
-                    <Chip
-                      label={`+${failedMwrs.length - 3} more`}
-                      size="small"
-                      variant="outlined"
-                      clickable
-                      onClick={() => navigate('/manifestworkreplicasets')}
-                    />
+              {!mwrsLoading && (degradedMwrs.length > 0 || failedMwrs.length > 0) ? (
+                <Box sx={{ display: "flex", flexDirection: "column", gap: 0.5 }}>
+                  {degradedMwrs.length > 0 && (
+                    <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5, alignItems: "center" }}>
+                      <Typography variant="body2" color="warning.main" sx={{ mr: 0.5 }}>
+                        {degradedMwrs.length} degraded:
+                      </Typography>
+                      {degradedMwrs.slice(0, 3).map(m => (
+                        <Chip
+                          key={m.id}
+                          label={`${m.namespace}/${m.name}`}
+                          size="small"
+                          color="warning"
+                          variant="outlined"
+                          clickable
+                          onClick={() => navigate(`/manifestworkreplicasets/${m.namespace}/${m.name}`)}
+                        />
+                      ))}
+                      {degradedMwrs.length > 3 && (
+                        <Chip
+                          label={`+${degradedMwrs.length - 3} more`}
+                          size="small"
+                          variant="outlined"
+                          clickable
+                          onClick={() => navigate('/manifestworkreplicasets')}
+                        />
+                      )}
+                    </Box>
+                  )}
+                  {failedMwrs.length > 0 && (
+                    <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5, alignItems: "center" }}>
+                      <Typography variant="body2" color="error.main" sx={{ mr: 0.5 }}>
+                        {failedMwrs.length} failed:
+                      </Typography>
+                      {failedMwrs.slice(0, 3).map(m => (
+                        <Chip
+                          key={m.id}
+                          label={`${m.namespace}/${m.name}`}
+                          size="small"
+                          color="error"
+                          variant="outlined"
+                          clickable
+                          onClick={() => navigate(`/manifestworkreplicasets/${m.namespace}/${m.name}`)}
+                        />
+                      ))}
+                      {failedMwrs.length > 3 && (
+                        <Chip
+                          label={`+${failedMwrs.length - 3} more`}
+                          size="small"
+                          variant="outlined"
+                          clickable
+                          onClick={() => navigate('/manifestworkreplicasets')}
+                        />
+                      )}
+                    </Box>
                   )}
                 </Box>
               ) : (
